@@ -279,8 +279,10 @@ export class PartitaScacchi {
 
   async makeStockfishMove() {
     const fen = this.getFen();
+    const depth = Number(document.getElementById('depthInput').value);
+    const maxThinkingTime = Number(document.getElementById('timeInput').value);
     try {
-      const data = await this.postChessApi({ fen: fen });
+      const data = await this.postChessApi({ fen: fen, depth: depth, maxThinkingTime: maxThinkingTime });
       console.log(data);
       if (data && data.from && data.to) {
         this.makeMove(`${data.from}${data.to}`);
