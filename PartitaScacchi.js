@@ -196,7 +196,7 @@ export class PartitaScacchi {
     if (this.activeColor === 'w' && !this.isWhite(piece)) {
       throw new Error('Tocca al bianco');
     }
-    
+
     if (this.activeColor === 'b' && !this.isBlack(piece)) {
       throw new Error('Tocca al nero');
     }
@@ -257,22 +257,71 @@ export class PartitaScacchi {
 
       if (isPawn && Math.abs(a.row - b.row) === 2) {
         const middleRow = (a.row + b.row) / 2;
-        this.enPassant = this.coordsToSquare(middleRow, a.col);
+        const target = this.coordsToSquare(middleRow, a.col);
+
+        this.enPassant = this.canEnPassant(target, isWhite) ? target : '-';
       }
     }
 
     if (isPawn || isCapture) this.halfmoveClock = 0;
     else this.halfmoveClock += 1;
 
-    const fen = this.getFen();
-    this.history.push({ move: uci, fen });
-
     if (this.activeColor === 'b') {
       this.fullmoveNumber += 1;
     }
     this.activeColor = this.activeColor === 'w' ? 'b' : 'w';
+    
+    const fen = this.getFen();
+    this.history.push({ move: uci, fen });
 
-    return this.getFen();
+    return fen;
+  }
+
+  async makeStockfishMove() {
+    const fen = this.getFen();
+    try {
+      const data = await this.postChessApi({ fen: fen });
+      console.log(data);
+      if (data && data.from && data.to) {
+        this.makeMove(`${data.from}${data.to}`);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }  
+
+  async postChessApi(data = {}) {
+    const response = await fetch("https://chess-api.com/v1", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+}
+
+  canEnPassant(targetSquare, movingWhite) {
+    if (!targetSquare) return false;
+
+    const { row, col } = this.squareToCoords(targetSquare);
+
+    const attackerRow = movingWhite ? row + 1 : row - 1;
+    const attackerPiece = movingWhite ? 'p' : 'P';
+
+    const candidates = [
+      [attackerRow, col - 1],
+      [attackerRow, col + 1]
+    ];
+
+    for (const [r, c] of candidates) {
+      if (r < 0 || r > 7 || c < 0 || c > 7) continue;
+      if (this.board[r][c] === attackerPiece) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   boardToFenPlacement() {

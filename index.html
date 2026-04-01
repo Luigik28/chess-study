@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chess FEN Tester</title>
+  <title>Chess</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,6 +22,10 @@
     button {
       cursor: pointer;
       margin-left: 8px;
+    }
+    select {
+      font-size: 16px;
+      padding: 10px 12px;
     }
     pre {
       background: #111;
@@ -49,34 +53,39 @@
   </style>
 </head>
 <body>
-  <h1>Chess FEN Tester</h1>
+  <h1>Chess</h1>
 
   <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
-
-  <div class="row">
-    <button id="resetBtn">Reset partita</button>
-  </div>
-
-  <div class="row">
-    <strong>FEN corrente:</strong>
-    <div id="fen" class="fen"></div>
-  </div>
-
-  <div class="row">
-    <strong>Scacchiera:</strong>
-    <pre id="board"></pre>
-  </div>
 
   <div class="row">
     <input id="moveInput" placeholder="es. e2e4" />
     <button id="moveBtn">Applica mossa</button>
   </div>
 
+  <div class="row">
+    <button id="resetBtn">Reset partita</button>
+  </div>
+
+  <div class="row">
+    <strong>Scacchiera:</strong> <button id="toggleBoard">Mostra</button>
+    <pre id="board" style="display: none;"></pre>
+  </div>
+
   <div id="message" class="row"></div>
 
   <div class="row">
-    <strong>Cronologia:</strong>
-    <ul id="history"></ul>
+    <strong>FEN corrente:</strong> <button id="toggleFen">Mostra</button>
+    <div id="fen" class="fen" style="display: none;"></div>
+  </div>
+
+  <div class="row">
+    <strong>Cronologia:</strong> <button id="toggleHistory">Mostra</button>
+    <ul id="history" style="display: none;"></ul>
+  </div>
+
+  <div class="row">
+    <label for="voiceSelect"><strong>Voce</strong></label><br />
+    <select id="voiceSelect"></select>
   </div>
 
   <script type="module">
@@ -91,6 +100,14 @@
     const resetBtn = document.getElementById('resetBtn');
     const historyEl = document.getElementById('history');
     const messageEl = document.getElementById('message');
+
+    const toggleBoardBtn = document.getElementById('toggleBoard');
+    const toggleHistoryBtn = document.getElementById('toggleHistory');
+    const toggleFenBtn = document.getElementById('toggleFen');
+    const voiceSelect = document.getElementById('voiceSelect');
+
+    const synth = window.speechSynthesis;
+    let voices = [];
 
     function render() {
       fenEl.textContent = partita.getFen();
@@ -109,14 +126,95 @@
       messageEl.className = isError ? 'row error' : 'row';
     }
 
-    moveBtn.addEventListener('click', () => {
+    function loadVoices() {
+      voices = synth.getVoices();
+      voiceSelect.innerHTML = '';
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usable = italianVoices.length ? italianVoices : voices;
+
+      let googleVoiceIndex = -1;
+
+      usable.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(option);
+        
+        if (voice.name.toLowerCase().includes('google')) {
+          googleVoiceIndex = index;
+        }
+      });
+
+      if (googleVoiceIndex !== -1) {
+        voiceSelect.value = googleVoiceIndex;
+      }
+    }
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+
+      synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'it-IT';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usable = italianVoices.length ? italianVoices : voices;
+      const selected = usable[Number(voiceSelect.value)];
+
+      if (selected) {
+        utterance.voice = selected;
+        utterance.lang = selected.lang;
+      }
+
+      synth.speak(utterance);
+    }
+
+    function coordToItalian(square) {
+      const cols = { a: 'a', b: 'bi', c: 'ci', d: 'di', e: 'e', f: 'effe', g: 'gi', h: 'acca' };
+      const rows = { '1': 'uno', '2': 'due', '3': 'tre', '4': 'quattro', '5': 'cinque', '6': 'sei', '7': 'sette', '8': 'otto' };
+      return `${cols[square[0]]} ${rows[square[1]]}`;
+    }
+
+    function speakMoveUci(move) {
+      if (!/^[a-h][1-8][a-h][1-8][qrbnQRBN]?$/.test(move)) {
+        speak(`Il motore ha giocato ${move}`);
+        return;
+      }
+
+      const from = move.slice(0, 2);
+      const to = move.slice(2, 4);
+      const promo = move[4] || '';
+
+      const piece = partita.getPiece(to);
+      const pieceNames = { p: 'pedone', n: 'cavallo', b: 'alfiere', r: 'torre', q: 'regina', k: 're' };
+      const pieceName = pieceNames[piece?.toLowerCase()] || 'pezzo';
+      
+      let text = `${pieceName} ${to}`;
+      if (promo) {
+        const names = { q: 'donna', r: 'torre', b: 'alfiere', n: 'cavallo' };
+        text = `promozione a ${names[promo.toLowerCase()] || promo} in ${to}`;
+      }
+      speak(text);
+    }
+
+    moveBtn.addEventListener('click', async () => {
       const move = moveInput.value.trim();
 
       try {
-        const newFen = partita.makeMove(move);
-        setMessage(`Mossa applicata. Nuova FEN: ${newFen}`, false);
+        partita.makeMove(move);
+        await partita.makeStockfishMove();
+        const lastMove = partita.history[partita.history.length - 1]?.move;
+        speakMoveUci(lastMove);
+        
+        setMessage(`Mossa applicata. Nuova FEN: ${partita.getFen()}`, false);
         moveInput.value = '';
         render();
+        moveInput.focus();
       } catch (err) {
         setMessage(err.message, true);
       }
@@ -131,6 +229,41 @@
       setMessage('Partita resettata.', false);
       render();
     });
+
+    toggleBoardBtn.addEventListener('click', () => {
+      if (boardEl.style.display === 'none') {
+        boardEl.style.display = 'block';
+        toggleBoardBtn.textContent = 'Nascondi';
+      } else {
+        boardEl.style.display = 'none';
+        toggleBoardBtn.textContent = 'Mostra';
+      }
+    });
+
+    toggleHistoryBtn.addEventListener('click', () => {
+      if (historyEl.style.display === 'none') {
+        historyEl.style.display = 'block';
+        toggleHistoryBtn.textContent = 'Nascondi';
+      } else {
+        historyEl.style.display = 'none';
+        toggleHistoryBtn.textContent = 'Mostra';
+      }
+    });
+
+    toggleFenBtn.addEventListener('click', () => {
+      if (fenEl.style.display === 'none') {
+        fenEl.style.display = 'block';
+        toggleFenBtn.textContent = 'Nascondi';
+      } else {
+        fenEl.style.display = 'none';
+        toggleFenBtn.textContent = 'Mostra';
+      }
+    });
+
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
 
     render();
   </script>
