@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test mosse scacchi</title>
+</head>
+<body>
+  <h1>Test notazione scacchistica</h1>
+
+  <input id="inputMossa" value="exd5" />
+  <button id="btnTest">Prova</button>
+
+  <p><strong>Notazione:</strong> <span id="outNotazione"></span></p>
+  <p><strong>Parlato:</strong> <span id="outParlato"></span></p>
+
+  <script type="module">
+    import { fromNotazione } from './Mossa.js';
+
+    const input = document.getElementById('inputMossa');
+    const btn = document.getElementById('btnTest');
+    const outNotazione = document.getElementById('outNotazione');
+    const outParlato = document.getElementById('outParlato');
+
+    function eseguiTest() {
+      const mossa = fromNotazione(input.value, 1, 'bianco');
+      outNotazione.textContent = mossa.toString();
+      outParlato.textContent = mossa.speak();
+    }
+
+    btn.addEventListener('click', eseguiTest);
+    eseguiTest();
+  </script>
+</body>
+</html>
