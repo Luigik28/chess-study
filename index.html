@@ -3,80 +3,80 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chess FEN Tester</title>
+  <title>Gioca contro Stockfish</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 900px;
+      max-width: 980px;
       margin: 32px auto;
       padding: 0 16px;
-      line-height: 1.5;
+      line-height: 1.45;
     }
-    input, button {
+    input, button, select {
       font-size: 16px;
       padding: 10px 12px;
     }
-    input {
-      width: 220px;
-    }
-    button {
-      cursor: pointer;
-      margin-left: 8px;
+    input { width: 220px; }
+    button { cursor: pointer; }
+    .row { margin: 16px 0; }
+    .fen {
+      background: #f2f2f2;
+      padding: 12px;
+      border-radius: 8px;
+      word-break: break-all;
     }
     pre {
       background: #111;
-      color: #eee;
+      color: #f0f0f0;
       padding: 16px;
       border-radius: 8px;
       overflow-x: auto;
     }
-    .row {
-      margin: 16px 0;
-    }
-    .error {
-      color: #b00020;
-      font-weight: bold;
-    }
-    .fen {
-      word-break: break-all;
-      background: #f3f3f3;
-      padding: 10px;
-      border-radius: 6px;
-    }
-    ul {
-      padding-left: 18px;
-    }
+    .error { color: #b00020; font-weight: bold; }
+    .ok { color: #0b6b2a; font-weight: bold; }
+    ul { padding-left: 20px; }
+    .small { color: #555; font-size: 14px; }
   </style>
 </head>
 <body>
-  <h1>Chess FEN Tester</h1>
+  <h1>Scacchi contro Stockfish</h1>
 
-  <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
+  <p>Tu giochi di bianco. Inserisci una mossa in formato UCI, ad esempio <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
 
   <div class="row">
-    <button id="resetBtn">Reset partita</button>
+    <button id="resetBtn">Nuova partita</button>
   </div>
 
   <div class="row">
-    <strong>FEN corrente:</strong>
+    <strong>FEN corrente</strong>
     <div id="fen" class="fen"></div>
   </div>
 
   <div class="row">
-    <strong>Scacchiera:</strong>
+    <strong>Scacchiera</strong>
     <pre id="board"></pre>
   </div>
 
   <div class="row">
     <input id="moveInput" placeholder="es. e2e4" />
-    <button id="moveBtn">Applica mossa</button>
+    <button id="moveBtn">Gioca mossa</button>
+    <button id="stopVoiceBtn" type="button">Ferma voce</button>
+  </div>
+
+  <div class="row">
+    <label for="voiceSelect"><strong>Voce</strong></label><br />
+    <select id="voiceSelect"></select>
   </div>
 
   <div id="message" class="row"></div>
 
   <div class="row">
-    <strong>Cronologia:</strong>
+    <strong>Storico mosse</strong>
     <ul id="history"></ul>
+  </div>
+
+  <div class="row small">
+    Nota: il codice sotto prova a leggere campi comuni della risposta API come <code>move</code>, <code>bestmove</code> o stringhe tipo <code>bestmove e7e5</code>. Se l'API restituisce un JSON con nomi leggermente diversi, basta adattare la funzione <code>extractEngineMove</code>. [web:97][web:100]
   </div>
 
   <script type="module">
@@ -89,48 +89,191 @@
     const moveInput = document.getElementById('moveInput');
     const moveBtn = document.getElementById('moveBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const stopVoiceBtn = document.getElementById('stopVoiceBtn');
     const historyEl = document.getElementById('history');
     const messageEl = document.getElementById('message');
+    const voiceSelect = document.getElementById('voiceSelect');
+
+    const synth = window.speechSynthesis;
+    let voices = [];
 
     function render() {
       fenEl.textContent = partita.getFen();
       boardEl.textContent = partita.renderBoardAscii();
       historyEl.innerHTML = '';
 
-      partita.history.forEach(item => {
+      partita.history.forEach((item, index) => {
         const li = document.createElement('li');
-        li.textContent = `${item.move} → ${item.fen}`;
+        li.textContent = `${index + 1}. ${item.move} → ${item.fen}`;
         historyEl.appendChild(li);
       });
     }
 
     function setMessage(text, isError = false) {
       messageEl.textContent = text;
-      messageEl.className = isError ? 'row error' : 'row';
+      messageEl.className = isError ? 'row error' : 'row ok';
     }
 
-    moveBtn.addEventListener('click', () => {
-      const move = moveInput.value.trim();
+    function loadVoices() {
+      voices = synth.getVoices();
+      voiceSelect.innerHTML = '';
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usable = italianVoices.length ? italianVoices : voices;
+
+      usable.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(option);
+      });
+    }
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+
+      synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'it-IT';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usable = italianVoices.length ? italianVoices : voices;
+      const selected = usable[Number(voiceSelect.value)];
+
+      if (selected) {
+        utterance.voice = selected;
+        utterance.lang = selected.lang;
+      }
+
+      synth.speak(utterance);
+    }
+
+    function coordToItalian(square) {
+      const cols = { a: 'a', b: 'bi', c: 'ci', d: 'di', e: 'e', f: 'effe', g: 'gi', h: 'acca' };
+      const rows = { '1': 'uno', '2': 'due', '3': 'tre', '4': 'quattro', '5': 'cinque', '6': 'sei', '7': 'sette', '8': 'otto' };
+      return `${cols[square[0]]} ${rows[square[1]]}`;
+    }
+
+    function speakMoveUci(move) {
+      if (!/^[a-h][1-8][a-h][1-8][qrbnQRBN]?$/.test(move)) {
+        speak(`Il motore ha giocato ${move}`);
+        return;
+      }
+
+      const from = move.slice(0, 2);
+      const to = move.slice(2, 4);
+      const promo = move[4] || '';
+
+      let text = `Il motore ha giocato da ${coordToItalian(from)} a ${coordToItalian(to)}`;
+      if (promo) {
+        const names = { q: 'donna', r: 'torre', b: 'alfiere', n: 'cavallo' };
+        text += ` promozione a ${names[promo.toLowerCase()] || promo}`;
+      }
+      speak(text);
+    }
+
+    function extractEngineMove(data) {
+      if (!data) return null;
+
+      if (typeof data.move === 'string') return data.move.trim();
+      if (typeof data.bestmove === 'string') {
+        const raw = data.bestmove.trim();
+        const match = raw.match(/bestmove\s+([a-h][1-8][a-h][1-8][qrbn]?)/i);
+        return match ? match[1] : raw;
+      }
+      if (typeof data.bestMove === 'string') return data.bestMove.trim();
+
+      if (typeof data.data === 'string') {
+        const match = data.data.match(/bestmove\s+([a-h][1-8][a-h][1-8][qrbn]?)/i);
+        if (match) return match[1];
+      }
+
+      return null;
+    }
+
+    async function askEngine(fen) {
+      const response = await fetch('https://chess-api.com/v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fen,
+          maxThinkingTime: 50
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Errore API: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const move = extractEngineMove(data);
+
+      if (!move) {
+        console.error('Risposta API non riconosciuta:', data);
+        throw new Error('Non sono riuscito a leggere la mossa del motore dalla risposta API');
+      }
+
+      return { move, data };
+    }
+
+    async function playUserMove() {
+      const userMove = moveInput.value.trim().toLowerCase();
+      if (!userMove) return;
 
       try {
-        const newFen = partita.makeMove(move);
-        setMessage(`Mossa applicata. Nuova FEN: ${newFen}`, false);
-        moveInput.value = '';
+        if (partita.activeColor !== 'w') {
+          throw new Error('Attendi la mossa del motore');
+        }
+
+        const fenAfterUser = partita.makeMove(userMove);
         render();
+        setMessage(`Hai giocato ${userMove}. FEN inviata al motore: ${fenAfterUser}`, false);
+
+        moveBtn.disabled = true;
+        moveInput.disabled = true;
+
+        const engineResult = await askEngine(fenAfterUser);
+        const engineMove = engineResult.move.toLowerCase();
+
+        const fenAfterEngine = partita.makeMove(engineMove);
+        render();
+
+        setMessage(`Motore: ${engineMove}. Nuova FEN: ${fenAfterEngine}`, false);
+        speakMoveUci(engineMove);
+        moveInput.value = '';
       } catch (err) {
-        setMessage(err.message, true);
+        console.error(err);
+        setMessage(err.message || 'Errore sconosciuto', true);
+      } finally {
+        moveBtn.disabled = false;
+        moveInput.disabled = false;
+        moveInput.focus();
       }
-    });
+    }
+
+    moveBtn.addEventListener('click', playUserMove);
 
     moveInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') moveBtn.click();
+      if (e.key === 'Enter') playUserMove();
     });
 
+    stopVoiceBtn.addEventListener('click', () => synth.cancel());
+
     resetBtn.addEventListener('click', () => {
+      synth.cancel();
       partita.reset();
-      setMessage('Partita resettata.', false);
       render();
+      setMessage('Nuova partita inizializzata.', false);
     });
+
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
 
     render();
   </script>
