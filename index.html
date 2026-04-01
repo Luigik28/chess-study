@@ -51,6 +51,29 @@
       padding-left: 18px;
     }
   </style>
+
+  <style>
+    @media (max-width: 600px) {
+      body {
+        font-size: 14px;
+        margin: 16px auto;
+        padding: 0 8px;
+      }
+      input, button, select {
+        font-size: 14px;
+        padding: 8px 10px;
+      }
+      input {
+        width: 180px;
+      }
+      pre {
+        padding: 12px;
+      }
+      .row {
+        margin: 12px 0;
+      }
+    }
+  </style>
 </head>
 <body>
   <h1>Chess</h1>
@@ -86,6 +109,7 @@
   <div class="row">
     <label for="voiceSelect"><strong>Voce</strong></label><br />
     <select id="voiceSelect"></select>
+    <button id="testVoiceBtn">Test Voce</button>
   </div>
 
   <script type="module">
@@ -105,6 +129,7 @@
     const toggleHistoryBtn = document.getElementById('toggleHistory');
     const toggleFenBtn = document.getElementById('toggleFen');
     const voiceSelect = document.getElementById('voiceSelect');
+    const testVoiceBtn = document.getElementById('testVoiceBtn');
 
     const synth = window.speechSynthesis;
     let voices = [];
@@ -258,6 +283,10 @@
         fenEl.style.display = 'none';
         toggleFenBtn.textContent = 'Mostra';
       }
+    });
+
+    testVoiceBtn.addEventListener('click', () => {
+      speak('Test della voce');
     });
 
     loadVoices();
