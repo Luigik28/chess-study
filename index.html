@@ -81,7 +81,7 @@
   <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
 
   <div class="row">
-    <input id="moveInput" placeholder="es. e2e4" />
+    <input id="moveInput" placeholder="es. e2e4" autocapitalize="off" />
     <button id="moveBtn">Applica mossa</button>
   </div>
 
@@ -236,7 +236,7 @@
         const lastMove = partita.history[partita.history.length - 1]?.move;
         speakMoveUci(lastMove);
         
-        setMessage(`Mossa applicata. Nuova FEN: ${partita.getFen()}`, false);
+        //setMessage(`Mossa applicata. Nuova FEN: ${partita.getFen()}`, false); 
         moveInput.value = '';
         render();
         moveInput.focus();
