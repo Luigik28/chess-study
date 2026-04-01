@@ -4,12 +4,48 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Test mosse scacchi</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+    }
+    input, button, select {
+      font-size: 16px;
+      padding: 10px 12px;
+      margin: 8px 0;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+    }
+    .row {
+      margin-bottom: 16px;
+    }
+  </style>
 </head>
 <body>
   <h1>Test notazione scacchistica</h1>
 
-  <input id="inputMossa" value="exd5" />
-  <button id="btnTest">Prova</button>
+  <div class="row">
+    <label for="inputMossa">Mossa</label>
+    <input id="inputMossa" value="exd5" />
+  </div>
+
+  <div class="row">
+    <label for="voiceSelect">Voce</label>
+    <select id="voiceSelect"></select>
+  </div>
+
+  <div class="row">
+    <button id="btnTest">Prova il test</button>
+    <button id="btnStop" type="button">Ferma voce</button>
+  </div>
 
   <p><strong>Notazione:</strong> <span id="outNotazione"></span></p>
   <p><strong>Parlato:</strong> <span id="outParlato"></span></p>
@@ -19,16 +55,77 @@
 
     const input = document.getElementById('inputMossa');
     const btn = document.getElementById('btnTest');
+    const btnStop = document.getElementById('btnStop');
     const outNotazione = document.getElementById('outNotazione');
     const outParlato = document.getElementById('outParlato');
+    const voiceSelect = document.getElementById('voiceSelect');
+
+    const synth = window.speechSynthesis;
+    let voices = [];
+
+    function loadVoices() {
+      voices = synth.getVoices();
+      voiceSelect.innerHTML = '';
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usableVoices = italianVoices.length ? italianVoices : voices;
+
+      usableVoices.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(option);
+      });
+    }
+
+    function parlaTesto(testo) {
+      if (!('speechSynthesis' in window)) {
+        alert('La sintesi vocale non è supportata in questo browser.');
+        return;
+      }
+
+      synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(testo);
+      utterance.lang = 'it-IT';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
+      const usableVoices = italianVoices.length ? italianVoices : voices;
+      const selectedVoice = usableVoices[Number(voiceSelect.value)];
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang;
+      }
+
+      synth.speak(utterance);
+    }
 
     function eseguiTest() {
       const mossa = fromNotazione(input.value, 1, 'bianco');
+      const parlato = mossa.speak();
+
       outNotazione.textContent = mossa.toString();
-      outParlato.textContent = mossa.speak();
+      outParlato.textContent = parlato;
+
+      parlaTesto(parlato);
     }
 
     btn.addEventListener('click', eseguiTest);
+
+    btnStop.addEventListener('click', () => {
+      synth.cancel();
+    });
+
+    loadVoices();
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
     eseguiTest();
   </script>
 </body>
