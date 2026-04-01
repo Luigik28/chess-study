@@ -3,130 +3,136 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Test mosse scacchi</title>
+  <title>Chess FEN Tester</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 700px;
-      margin: 40px auto;
+      max-width: 900px;
+      margin: 32px auto;
       padding: 0 16px;
       line-height: 1.5;
     }
-    input, button, select {
+    input, button {
       font-size: 16px;
       padding: 10px 12px;
-      margin: 8px 0;
     }
-    input, select {
-      width: 100%;
-      box-sizing: border-box;
+    input {
+      width: 220px;
     }
     button {
       cursor: pointer;
+      margin-left: 8px;
+    }
+    pre {
+      background: #111;
+      color: #eee;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
     }
     .row {
-      margin-bottom: 16px;
+      margin: 16px 0;
+    }
+    .error {
+      color: #b00020;
+      font-weight: bold;
+    }
+    .fen {
+      word-break: break-all;
+      background: #f3f3f3;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    ul {
+      padding-left: 18px;
     }
   </style>
 </head>
 <body>
-  <h1>Test notazione scacchistica</h1>
+  <h1>Chess FEN Tester</h1>
+
+  <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
 
   <div class="row">
-    <label for="inputMossa">Mossa</label>
-    <input id="inputMossa" value="exd5" />
+    <button id="resetBtn">Reset partita</button>
   </div>
 
   <div class="row">
-    <label for="voiceSelect">Voce</label>
-    <select id="voiceSelect"></select>
+    <strong>FEN corrente:</strong>
+    <div id="fen" class="fen"></div>
   </div>
 
   <div class="row">
-    <button id="btnTest">Prova il test</button>
-    <button id="btnStop" type="button">Ferma voce</button>
+    <strong>Scacchiera:</strong>
+    <pre id="board"></pre>
   </div>
 
-  <p><strong>Notazione:</strong> <span id="outNotazione"></span></p>
-  <p><strong>Parlato:</strong> <span id="outParlato"></span></p>
+  <div class="row">
+    <input id="moveInput" placeholder="es. e2e4" />
+    <button id="moveBtn">Applica mossa</button>
+  </div>
+
+  <div id="message" class="row"></div>
+
+  <div class="row">
+    <strong>Cronologia:</strong>
+    <ul id="history"></ul>
+  </div>
 
   <script type="module">
-    import { fromNotazione } from './Mossa.js';
+    import { PartitaScacchi } from './PartitaScacchi.js';
 
-    const input = document.getElementById('inputMossa');
-    const btn = document.getElementById('btnTest');
-    const btnStop = document.getElementById('btnStop');
-    const outNotazione = document.getElementById('outNotazione');
-    const outParlato = document.getElementById('outParlato');
-    const voiceSelect = document.getElementById('voiceSelect');
+    const partita = new PartitaScacchi();
 
-    const synth = window.speechSynthesis;
-    let voices = [];
+    const fenEl = document.getElementById('fen');
+    const boardEl = document.getElementById('board');
+    const moveInput = document.getElementById('moveInput');
+    const moveBtn = document.getElementById('moveBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const historyEl = document.getElementById('history');
+    const messageEl = document.getElementById('message');
 
-    function loadVoices() {
-      voices = synth.getVoices();
-      voiceSelect.innerHTML = '';
+    function render() {
+      fenEl.textContent = partita.getFen();
+      boardEl.textContent = partita.renderBoardAscii();
+      historyEl.innerHTML = '';
 
-      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
-      const usableVoices = italianVoices.length ? italianVoices : voices;
-
-      usableVoices.forEach((voice, index) => {
-        const option = document.createElement('option');
-        option.value = index;
-        option.textContent = `${voice.name} (${voice.lang})`;
-        voiceSelect.appendChild(option);
+      partita.history.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = `${item.move} → ${item.fen}`;
+        historyEl.appendChild(li);
       });
     }
 
-    function parlaTesto(testo) {
-      if (!('speechSynthesis' in window)) {
-        alert('La sintesi vocale non è supportata in questo browser.');
-        return;
-      }
-
-      synth.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(testo);
-      utterance.lang = 'it-IT';
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      const italianVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('it'));
-      const usableVoices = italianVoices.length ? italianVoices : voices;
-      const selectedVoice = usableVoices[Number(voiceSelect.value)];
-
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang;
-      }
-
-      synth.speak(utterance);
+    function setMessage(text, isError = false) {
+      messageEl.textContent = text;
+      messageEl.className = isError ? 'row error' : 'row';
     }
 
-    function eseguiTest() {
-      const mossa = fromNotazione(input.value, 1, 'bianco');
-      const parlato = mossa.speak();
+    moveBtn.addEventListener('click', () => {
+      const move = moveInput.value.trim();
 
-      outNotazione.textContent = mossa.toString();
-      outParlato.textContent = parlato;
-
-      parlaTesto(parlato);
-    }
-
-    btn.addEventListener('click', eseguiTest);
-
-    btnStop.addEventListener('click', () => {
-      synth.cancel();
+      try {
+        const newFen = partita.makeMove(move);
+        setMessage(`Mossa applicata. Nuova FEN: ${newFen}`, false);
+        moveInput.value = '';
+        render();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
     });
 
-    loadVoices();
+    moveInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') moveBtn.click();
+    });
 
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = loadVoices;
-    }
+    resetBtn.addEventListener('click', () => {
+      partita.reset();
+      setMessage('Partita resettata.', false);
+      render();
+    });
 
-    eseguiTest();
+    render();
   </script>
 </body>
 </html>
