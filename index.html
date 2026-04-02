@@ -542,6 +542,7 @@
         await partita.makeStockfishMove();
         const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
         speakMoveUci(sanMove);
+        sanInput.focus();
         setMessage(`Mossa del motore: ${sanMove}`, false);
         render();
         moveInput.focus();
