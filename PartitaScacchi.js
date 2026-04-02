@@ -386,7 +386,7 @@ export class PartitaScacchi {
       html += '</tr>';
     }
     // Riga delle coordinate in basso
-    html += '<tr><td></td>';
+    html += '<tr><td class="coord">&nbsp;</td>';
     for (let c = 0; c < 8; c++) {
       html += `<td class="coord">${String.fromCharCode(97 + c)}</td>`;
     }
