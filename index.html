@@ -85,6 +85,22 @@
     ul {
       padding-left: 18px;
     }
+    .input-label {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .move-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .move-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
   </style>
 
   <style>
@@ -129,12 +145,26 @@
   </style>
 </head>
 <body>
-  <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
+  <p>Inserisci mosse in formato UCI (es. <code>e2e4</code>, <code>g1f3</code>) oppure in formato SAN (es. <code>e4</code>, <code>Nf3</code>, <code>O-O</code>).</p>
 
   <div class="row">
-    <input id="moveInput" placeholder="es. e2e4" autocapitalize="off" />
-    <button id="moveBtn">Applica mossa</button>
-    <button id="engineMoveBtn">Mossa motore</button>
+    <div class="move-inputs">
+      <div>
+        <span class="input-label">Mossa UCI (es. e2e4, g1f3, e7e8q)</span>
+        <div class="move-row">
+          <input id="moveInput" placeholder="es. e2e4" autocapitalize="off" />
+          <button id="moveBtn">Applica mossa</button>
+          <button id="engineMoveBtn">Mossa motore</button>
+        </div>
+      </div>
+      <div>
+        <span class="input-label">Mossa SAN (es. e4, Nf3, O-O, exd5, Qxh7+)</span>
+        <div class="move-row">
+          <input id="sanInput" placeholder="es. e4, Nf3, O-O" autocapitalize="off" />
+          <button id="sanMoveBtn">Applica mossa SAN</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="message" class="row"></div>
@@ -188,6 +218,8 @@
     const moveInput = document.getElementById('moveInput');
     const moveBtn = document.getElementById('moveBtn');
     const engineMoveBtn = document.getElementById('engineMoveBtn');
+    const sanInput = document.getElementById('sanInput');
+    const sanMoveBtn = document.getElementById('sanMoveBtn');
     const resetBtn = document.getElementById('resetBtn');
     const fenInput = document.getElementById('fenInput');
     const loadFenBtn = document.getElementById('loadFenBtn');
@@ -206,6 +238,86 @@
     const synth = window.speechSynthesis;
     let voices = [];
     let voiceEnabled = true;
+
+    // ----------------------------------------------------------------
+    // Parser SAN → UCI
+    // ----------------------------------------------------------------
+    function sanToUci(san) {
+      const board = partita.board;
+      const activeColor = partita.activeColor;
+      const isWhite = activeColor === 'w';
+
+      // Rimuovi annotazioni di scacco / scaccomatto
+      const cleaned = san.replace(/[+#!?]/g, '').trim();
+
+      // Arrocco
+      if (cleaned === 'O-O-O' || cleaned === '0-0-0') {
+        return isWhite ? 'e1c1' : 'e8c8';
+      }
+      if (cleaned === 'O-O' || cleaned === '0-0') {
+        return isWhite ? 'e1g1' : 'e8g8';
+      }
+
+      // Regex per catturare una mossa SAN standard:
+      // [pezzo] [disambiguazione?] [x?] destinazione [=promozione?]
+      const sanRegex = /^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(=[QRBN])?$/;
+      const match = cleaned.match(sanRegex);
+
+      if (!match) {
+        throw new Error(`Notazione SAN non riconosciuta: "${san}"`);
+      }
+
+      const [, pieceLetter, disambFile, disambRank, , destination, promotionStr] = match;
+
+      const destFile = destination.charCodeAt(0) - 97; // 0-7
+      const destRank = parseInt(destination[1]);        // 1-8
+      const destRow = 8 - destRank;                     // riga board (0=rank8)
+      const destCol = destFile;
+
+      const promotion = promotionStr ? promotionStr[1].toLowerCase() : null;
+
+      // Determina il tipo di pezzo cercato (maiuscolo=bianco, minuscolo=nero)
+      let pieceChar;
+      if (!pieceLetter) {
+        // Pedone
+        pieceChar = isWhite ? 'P' : 'p';
+      } else {
+        pieceChar = isWhite ? pieceLetter.toUpperCase() : pieceLetter.toLowerCase();
+      }
+
+      // Cerca tutti i pezzi del tipo corretto sulla scacchiera
+      const candidates = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (board[r][c] !== pieceChar) continue;
+          const fromSquare = String.fromCharCode(97 + c) + String(8 - r);
+          const toSquare = destination;
+
+          // Applica filtri disambiguazione
+          if (disambFile && c !== (disambFile.charCodeAt(0) - 97)) continue;
+          if (disambRank && r !== (8 - parseInt(disambRank))) continue;
+
+          // Verifica se la mossa è legalmente valida tramite il motore interno
+          try {
+            partita.validateBasicMove(board[r][c], fromSquare, toSquare, partita.enPassant);
+            candidates.push({ fromSquare, toSquare, r, c });
+          } catch {
+            // mossa non valida per questo pezzo, salta
+          }
+        }
+      }
+
+      if (candidates.length === 0) {
+        throw new Error(`Nessun pezzo può eseguire la mossa SAN: "${san}"`);
+      }
+      if (candidates.length > 1) {
+        throw new Error(`Mossa SAN ambigua (più pezzi possibili): "${san}". Aggiungi una disambiguazione.`);
+      }
+
+      const { fromSquare, toSquare } = candidates[0];
+      return fromSquare + toSquare + (promotion || '');
+    }
+    // ----------------------------------------------------------------
 
     function render() {
       fenEl.textContent = partita.getFen();
@@ -379,6 +491,34 @@
     moveInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') moveBtn.click();
     });
+
+    // ----------------------------------------------------------------
+    // Bottone SAN
+    // ----------------------------------------------------------------
+    sanMoveBtn.addEventListener('click', async () => {
+      const san = sanInput.value.trim();
+      if (!san) return;
+
+      try {
+        const uci = sanToUci(san);
+        partita.makeMove(uci);
+        await partita.makeStockfishMove();
+        const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
+        speakMoveUci(sanMove);
+
+        setMessage(`Mossa SAN "${san}" → UCI "${uci}" applicata. Motore: ${sanMove}`, false);
+        sanInput.value = '';
+        render();
+        sanInput.focus();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
+    });
+
+    sanInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sanMoveBtn.click();
+    });
+    // ----------------------------------------------------------------
 
     engineMoveBtn.addEventListener('click', async () => {
       try {
