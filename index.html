@@ -145,7 +145,7 @@
   </style>
 </head>
 <body>
-  <p>Inserisci mosse in formato UCI (es. <code>e2e4</code>, <code>g1f3</code>) oppure in formato SAN (es. <code>e4</code>, <code>Nf3</code>, <code>O-O</code>).</p>
+  <p>Inserisci mosse in formato UCI (es. <code>e2e4</code>, <code>g1f3</code>) oppure in notazione SAN italiana (es. <code>e4</code>, <code>Cf3</code>, <code>0-0</code>).</p>
 
   <div class="row">
     <div class="move-inputs">
@@ -157,9 +157,9 @@
         </div>
       </div>
       <div>
-        <span class="input-label">Mossa SAN (es. e4, Nf3, O-O, exd5, Qxh7+)</span>
+        <span class="input-label">Mossa SAN italiana &mdash; R=Re, D=Donna, T=Torre, A=Alfiere, C=Cavallo (es. e4, Cf3, Axe5, 0-0)</span>
         <div class="move-row">
-          <input id="sanInput" placeholder="es. e4, Nf3, O-O" autocapitalize="off" />
+          <input id="sanInput" placeholder="es. e4, Cf3, 0-0" autocapitalize="off" />
           <button id="sanMoveBtn">Applica mossa SAN</button>
         </div>
       </div>
@@ -243,17 +243,29 @@
     let voiceEnabled = true;
 
     // ----------------------------------------------------------------
-    // Parser SAN → UCI
+    // Mappatura SAN italiana -> SAN inglese (lettera pezzo)
+    // R=Re(K), D=Donna(Q), T=Torre(R), A=Alfiere(B), C=Cavallo(N)
+    // Accetta anche le lettere inglesi per compatibilità
+    // ----------------------------------------------------------------
+    const ITA_TO_ENG_PIECE = { R: 'K', D: 'Q', T: 'R', A: 'B', C: 'N' };
+    // Promozione italiana -> inglese
+    const ITA_TO_ENG_PROMO = { R: 'K', D: 'Q', T: 'R', A: 'B', C: 'N',
+                                K: 'K', Q: 'Q', B: 'B', N: 'N' };
+    // Tutte le lettere di pezzo ammesse (italiane + inglesi)
+    const ALL_PIECE_LETTERS = 'RDTACKQBN';
+
+    // ----------------------------------------------------------------
+    // Parser SAN italiano → UCI
     // ----------------------------------------------------------------
     function sanToUci(san) {
       const board = partita.board;
       const activeColor = partita.activeColor;
       const isWhite = activeColor === 'w';
 
-      // Rimuovi annotazioni di scacco / scaccomatto
+      // Rimuovi annotazioni di scacco / scaccomatto e spazi
       const cleaned = san.replace(/[+#!?]/g, '').trim();
 
-      // Arrocco
+      // Arrocco (sia con O che con 0)
       if (cleaned === 'O-O-O' || cleaned === '0-0-0') {
         return isWhite ? 'e1c1' : 'e8c8';
       }
@@ -261,31 +273,50 @@
         return isWhite ? 'e1g1' : 'e8g8';
       }
 
-      // Regex per catturare una mossa SAN standard:
-      // [pezzo] [disambiguazione?] [x?] destinazione [=promozione?]
-      const sanRegex = /^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(=[QRBN])?$/;
+      // Regex SAN: accetta lettere di pezzo italiane E inglesi
+      // Gruppo 1: lettera pezzo (opzionale) — RDTACKQBN
+      // Gruppo 2: disambiguazione file (opzionale) — [a-h]
+      // Gruppo 3: disambiguazione rank (opzionale) — [1-8]
+      // Gruppo 4: cattura (opzionale) — x
+      // Gruppo 5: destinazione — [a-h][1-8]
+      // Gruppo 6: promozione (opzionale) — =[RDTACKQBN]
+      const sanRegex = new RegExp(
+        `^([${ALL_PIECE_LETTERS}])?([a-h])?([1-8])?(x)?([a-h][1-8])(=[${ALL_PIECE_LETTERS}])?$`
+      );
       const match = cleaned.match(sanRegex);
 
       if (!match) {
         throw new Error(`Notazione SAN non riconosciuta: "${san}"`);
       }
 
-      const [, pieceLetter, disambFile, disambRank, , destination, promotionStr] = match;
+      const [, rawPieceLetter, disambFile, disambRank, , destination, promotionStr] = match;
 
-      const destFile = destination.charCodeAt(0) - 97; // 0-7
-      const destRank = parseInt(destination[1]);        // 1-8
-      const destRow = 8 - destRank;                     // riga board (0=rank8)
-      const destCol = destFile;
+      // Converti lettera pezzo italiana in inglese
+      let engPieceLetter = null;
+      if (rawPieceLetter) {
+        engPieceLetter = ITA_TO_ENG_PIECE[rawPieceLetter] ?? rawPieceLetter;
+      }
 
-      const promotion = promotionStr ? promotionStr[1].toLowerCase() : null;
+      // Gestione promozione: converti lettera italiana in inglese
+      let promotion = null;
+      if (promotionStr) {
+        const rawPromo = promotionStr[1]; // es. "=D" -> "D"
+        const engPromo = ITA_TO_ENG_PROMO[rawPromo] ?? rawPromo;
+        // Per la promozione UCI si usa la lettera inglese minuscola (escluso re)
+        // Pezzi validi per promozione: D/Q, T/R, A/B, C/N
+        if (!['Q','R','B','N'].includes(engPromo)) {
+          throw new Error(`Promozione non valida: "${rawPromo}". Usa D, T, A o C.`);
+        }
+        promotion = engPromo.toLowerCase();
+      }
 
-      // Determina il tipo di pezzo cercato (maiuscolo=bianco, minuscolo=nero)
+      // Determina il carattere pezzo sulla scacchiera (case-sensitive: bianco=maiusc, nero=minusc)
       let pieceChar;
-      if (!pieceLetter) {
-        // Pedone
+      if (!engPieceLetter) {
+        // Nessuna lettera = pedone
         pieceChar = isWhite ? 'P' : 'p';
       } else {
-        pieceChar = isWhite ? pieceLetter.toUpperCase() : pieceLetter.toLowerCase();
+        pieceChar = isWhite ? engPieceLetter.toUpperCase() : engPieceLetter.toLowerCase();
       }
 
       // Cerca tutti i pezzi del tipo corretto sulla scacchiera
@@ -294,7 +325,6 @@
         for (let c = 0; c < 8; c++) {
           if (board[r][c] !== pieceChar) continue;
           const fromSquare = String.fromCharCode(97 + c) + String(8 - r);
-          const toSquare = destination;
 
           // Applica filtri disambiguazione
           if (disambFile && c !== (disambFile.charCodeAt(0) - 97)) continue;
@@ -302,8 +332,8 @@
 
           // Verifica se la mossa è legalmente valida tramite il motore interno
           try {
-            partita.validateBasicMove(board[r][c], fromSquare, toSquare, partita.enPassant);
-            candidates.push({ fromSquare, toSquare, r, c });
+            partita.validateBasicMove(board[r][c], fromSquare, destination, partita.enPassant);
+            candidates.push({ fromSquare, toSquare: destination });
           } catch {
             // mossa non valida per questo pezzo, salta
           }
@@ -311,10 +341,10 @@
       }
 
       if (candidates.length === 0) {
-        throw new Error(`Nessun pezzo può eseguire la mossa SAN: "${san}"`);
+        throw new Error(`Nessun pezzo può eseguire la mossa: "${san}"`);
       }
       if (candidates.length > 1) {
-        throw new Error(`Mossa SAN ambigua (più pezzi possibili): "${san}". Aggiungi una disambiguazione.`);
+        throw new Error(`Mossa ambigua (più pezzi possibili): "${san}". Aggiungi una disambiguazione (es. C1f3, Tae1).`);
       }
 
       const { fromSquare, toSquare } = candidates[0];
@@ -401,10 +431,8 @@
       const files = { a: 'a', b: 'bi', c: 'ci', d: 'di', e: 'e', f: 'effe', g: 'gi', h: 'acca' };
       const ranks = { '1': 'uno', '2': 'due', '3': 'tre', '4': 'quattro', '5': 'cinque', '6': 'sei', '7': 'sette', '8': 'otto' };
 
-      // Rimuovi scacco/scaccomatto dalla fine
       let sanMove = move.replace(/[+#]$/, '');
 
-      // Determina se è promozione
       const promotionRegex = /=([QRBN])$/;
       const promotionMatch = sanMove.match(promotionRegex);
       let promotionPiece = null;
@@ -413,32 +441,24 @@
         sanMove = sanMove.replace(promotionMatch[0], '');
       }
 
-      // Determina se è cattura
       const isCapture = sanMove.includes('x');
       sanMove = sanMove.replace('x', '');
 
-      // Parse della mossa SAN
       let piece = null;
       let disambiguation = '';
       let destination = '';
 
       if (sanMove.length === 2 && /^[a-h][1-8]$/.test(sanMove)) {
-        // Mossa di pedone semplice (e.g., "e4")
         piece = 'pedone';
         destination = sanMove;
       } else if (sanMove.match(/^[KQRBN]/)) {
-        // Mossa di pezzo
         const pieceLetter = sanMove[0];
         piece = pieceNames[pieceLetter];
         sanMove = sanMove.substring(1);
-
-        // Estrai disambiguazione e destinazione
         const remaining = sanMove;
         if (remaining.length === 2) {
-          // Solo destinazione (e.g., "Nf3")
           destination = remaining;
         } else if (remaining.length === 3) {
-          // Disambiguazione + destinazione (e.g., "Rae1")
           disambiguation = remaining[0];
           destination = remaining.substring(1);
         }
@@ -446,15 +466,12 @@
 
       if (!destination) return;
 
-      // Converti destinazione in italiano
       const destFile = destination[0];
       const destRank = destination[1];
       const destFileIt = files[destFile];
       const destRankIt = ranks[destRank];
 
       let text = '';
-
-      // Costruisci il testo
       if (isCapture) {
         text = `${piece} per ${destFileIt} ${destRankIt}`;
       } else if (disambiguation) {
@@ -464,7 +481,6 @@
         text = `${piece} ${destFileIt} ${destRankIt}`;
       }
 
-      // Aggiungi promozione se presente
       if (promotionPiece) {
         const promotionName = pieceNames[promotionPiece];
         text += ` promozione a ${promotionName}`;
@@ -473,29 +489,28 @@
       speak(text);
     }
 
-    async function move(move) {
-      try {
-        partita.makeMove(move);
-        await partita.makeStockfishMove();
-        const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
-        speakMoveUci(sanMove);
-        
-        setMessage(`Ultima mossa del motore: ${sanMove}`, false);
-        moveInput.value = '';
-        sanInput.value = '';
-        render();
-      } catch (err) {
-        setMessage(err.message, true);
-      }
+    async function applyMove(uci) {
+      partita.makeMove(uci);
+      await partita.makeStockfishMove();
+      const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
+      speakMoveUci(sanMove);
+      setMessage(`Ultima mossa del motore: ${sanMove}`, false);
+      moveInput.value = '';
+      sanInput.value = '';
+      render();
     }
-    
+
     // ----------------------------------------------------------------
     // Bottone UCI
     // ----------------------------------------------------------------
     moveBtn.addEventListener('click', async () => {
-      const move = moveInput.value.trim();
-      await move(move);
-      moveInput.focus();
+      const uci = moveInput.value.trim();
+      try {
+        await applyMove(uci);
+        moveInput.focus();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
     });
 
     moveInput.addEventListener('keydown', (e) => {
@@ -503,14 +518,14 @@
     });
 
     // ----------------------------------------------------------------
-    // Bottone SAN
+    // Bottone SAN italiano
     // ----------------------------------------------------------------
     sanMoveBtn.addEventListener('click', async () => {
       const san = sanInput.value.trim();
       if (!san) return;
       try {
         const uci = sanToUci(san);
-        await move(uci);
+        await applyMove(uci);
         sanInput.focus();
       } catch (err) {
         setMessage(err.message, true);
@@ -527,7 +542,6 @@
         await partita.makeStockfishMove();
         const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
         speakMoveUci(sanMove);
-        
         setMessage(`Mossa del motore: ${sanMove}`, false);
         render();
         moveInput.focus();
