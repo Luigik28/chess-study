@@ -154,7 +154,6 @@
         <div class="move-row">
           <input id="moveInput" placeholder="es. e2e4" autocapitalize="off" />
           <button id="moveBtn">Applica mossa</button>
-          <button id="engineMoveBtn">Mossa motore</button>
         </div>
       </div>
       <div>
@@ -165,6 +164,10 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="row">
+    <button id="engineMoveBtn">Mossa motore</button>
   </div>
 
   <div id="message" class="row"></div>
@@ -470,9 +473,7 @@
       speak(text);
     }
 
-    moveBtn.addEventListener('click', async () => {
-      const move = moveInput.value.trim();
-
+    async function move(move) {
       try {
         partita.makeMove(move);
         await partita.makeStockfishMove();
@@ -481,11 +482,20 @@
         
         setMessage(`Ultima mossa del motore: ${sanMove}`, false);
         moveInput.value = '';
+        sanInput.value = '';
         render();
-        moveInput.focus();
       } catch (err) {
         setMessage(err.message, true);
       }
+    }
+    
+    // ----------------------------------------------------------------
+    // Bottone UCI
+    // ----------------------------------------------------------------
+    moveBtn.addEventListener('click', async () => {
+      const move = moveInput.value.trim();
+      await move(move);
+      moveInput.focus();
     });
 
     moveInput.addEventListener('keydown', (e) => {
@@ -498,17 +508,9 @@
     sanMoveBtn.addEventListener('click', async () => {
       const san = sanInput.value.trim();
       if (!san) return;
-
       try {
         const uci = sanToUci(san);
-        partita.makeMove(uci);
-        await partita.makeStockfishMove();
-        const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
-        speakMoveUci(sanMove);
-
-        setMessage(`Mossa SAN "${san}" → UCI "${uci}" applicata. Motore: ${sanMove}`, false);
-        sanInput.value = '';
-        render();
+        await move(uci);
         sanInput.focus();
       } catch (err) {
         setMessage(err.message, true);
