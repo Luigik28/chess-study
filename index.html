@@ -104,6 +104,9 @@
       input[type="number"] {
         width: 60px;
       }
+      #fenInput {
+        width: 200px;
+      }
       pre {
         padding: 12px;
       }
@@ -131,6 +134,7 @@
   <div class="row">
     <input id="moveInput" placeholder="es. e2e4" autocapitalize="off" />
     <button id="moveBtn">Applica mossa</button>
+    <button id="engineMoveBtn">Mossa motore</button>
   </div>
 
   <div id="message" class="row"></div>
@@ -152,12 +156,15 @@
 
   <div class="row">
     <button id="resetBtn">Reset partita</button>
+    <input id="fenInput" placeholder="Inserisci FEN per caricare partita" style="width: 400px;" />
+    <button id="loadFenBtn">Carica FEN</button>
   </div>
 
   <div class="row">
     <label for="voiceSelect"><strong>Voce</strong></label><br />
     <select id="voiceSelect"></select>
     <button id="testVoiceBtn">Test Voce</button>
+    <button id="toggleVoiceBtn">Disabilita voce</button>
   </div>
 
   <div class="row">
@@ -180,7 +187,10 @@
     const boardEl = document.getElementById('board');
     const moveInput = document.getElementById('moveInput');
     const moveBtn = document.getElementById('moveBtn');
+    const engineMoveBtn = document.getElementById('engineMoveBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const fenInput = document.getElementById('fenInput');
+    const loadFenBtn = document.getElementById('loadFenBtn');
     const historyEl = document.getElementById('history');
     const messageEl = document.getElementById('message');
 
@@ -191,9 +201,11 @@
     const testVoiceBtn = document.getElementById('testVoiceBtn');
     const toggleSettingsBtn = document.getElementById('toggleSettings');
     const settingsEl = document.getElementById('settings');
+    const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
 
     const synth = window.speechSynthesis;
     let voices = [];
+    let voiceEnabled = true;
 
     function render() {
       fenEl.textContent = partita.getFen();
@@ -238,6 +250,7 @@
     }
 
     function speak(text) {
+      if (!voiceEnabled) return;
       if (!('speechSynthesis' in window)) return;
 
       synth.cancel();
@@ -267,24 +280,81 @@
     }
 
     function speakMoveUci(move) {
-      if (!/^[a-h][1-8][a-h][1-8][qrbnQRBN]?$/.test(move)) {
-        speak(`Il motore ha giocato ${move}`);
-        return;
+      if (!move) return;
+
+      const pieceNames = { K: 're', Q: 'donna', R: 'torre', B: 'alfiere', N: 'cavallo' };
+      const files = { a: 'a', b: 'bi', c: 'ci', d: 'di', e: 'e', f: 'effe', g: 'gi', h: 'acca' };
+      const ranks = { '1': 'uno', '2': 'due', '3': 'tre', '4': 'quattro', '5': 'cinque', '6': 'sei', '7': 'sette', '8': 'otto' };
+
+      // Rimuovi scacco/scaccomatto dalla fine
+      let sanMove = move.replace(/[+#]$/, '');
+
+      // Determina se è promozione
+      const promotionRegex = /=([QRBN])$/;
+      const promotionMatch = sanMove.match(promotionRegex);
+      let promotionPiece = null;
+      if (promotionMatch) {
+        promotionPiece = promotionMatch[1];
+        sanMove = sanMove.replace(promotionMatch[0], '');
       }
 
-      const from = move.slice(0, 2);
-      const to = move.slice(2, 4);
-      const promo = move[4] || '';
+      // Determina se è cattura
+      const isCapture = sanMove.includes('x');
+      sanMove = sanMove.replace('x', '');
 
-      const piece = partita.getPiece(to);
-      const pieceNames = { p: 'pedone', n: 'cavallo', b: 'alfiere', r: 'torre', q: 'regina', k: 're' };
-      const pieceName = pieceNames[piece?.toLowerCase()] || 'pezzo';
-      
-      let text = `${pieceName} ${to}`;
-      if (promo) {
-        const names = { q: 'donna', r: 'torre', b: 'alfiere', n: 'cavallo' };
-        text = `promozione a ${names[promo.toLowerCase()] || promo} in ${to}`;
+      // Parse della mossa SAN
+      let piece = null;
+      let disambiguation = '';
+      let destination = '';
+
+      if (sanMove.length === 2 && /^[a-h][1-8]$/.test(sanMove)) {
+        // Mossa di pedone semplice (e.g., "e4")
+        piece = 'pedone';
+        destination = sanMove;
+      } else if (sanMove.match(/^[KQRBN]/)) {
+        // Mossa di pezzo
+        const pieceLetter = sanMove[0];
+        piece = pieceNames[pieceLetter];
+        sanMove = sanMove.substring(1);
+
+        // Estrai disambiguazione e destinazione
+        const remaining = sanMove;
+        if (remaining.length === 2) {
+          // Solo destinazione (e.g., "Nf3")
+          destination = remaining;
+        } else if (remaining.length === 3) {
+          // Disambiguazione + destinazione (e.g., "Rae1")
+          disambiguation = remaining[0];
+          destination = remaining.substring(1);
+        }
       }
+
+      if (!destination) return;
+
+      // Converti destinazione in italiano
+      const destFile = destination[0];
+      const destRank = destination[1];
+      const destFileIt = files[destFile];
+      const destRankIt = ranks[destRank];
+
+      let text = '';
+
+      // Costruisci il testo
+      if (isCapture) {
+        text = `${piece} per ${destFileIt} ${destRankIt}`;
+      } else if (disambiguation) {
+        const disambIt = /^[a-h]$/.test(disambiguation) ? files[disambiguation] : ranks[disambiguation];
+        text = `${piece} ${disambIt} ${destFileIt} ${destRankIt}`;
+      } else {
+        text = `${piece} ${destFileIt} ${destRankIt}`;
+      }
+
+      // Aggiungi promozione se presente
+      if (promotionPiece) {
+        const promotionName = pieceNames[promotionPiece];
+        text += ` promozione a ${promotionName}`;
+      }
+
       speak(text);
     }
 
@@ -310,10 +380,36 @@
       if (e.key === 'Enter') moveBtn.click();
     });
 
+    engineMoveBtn.addEventListener('click', async () => {
+      try {
+        await partita.makeStockfishMove();
+        const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
+        speakMoveUci(sanMove);
+        
+        setMessage(`Mossa del motore: ${sanMove}`, false);
+        render();
+        moveInput.focus();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
+    });
+
     resetBtn.addEventListener('click', () => {
       partita.reset();
+      fenInput.value = '';
       setMessage('Partita resettata.', false);
       render();
+    });
+
+    loadFenBtn.addEventListener('click', () => {
+      const fen = fenInput.value.trim();
+      try {
+        partita.loadFromFen(fen);
+        setMessage('Partita caricata da FEN.', false);
+        render();
+      } catch (err) {
+        setMessage(err.message, true);
+      }
     });
 
     toggleBoardBtn.addEventListener('click', () => {
@@ -348,6 +444,12 @@
 
     testVoiceBtn.addEventListener('click', () => {
       speak('Test della voce');
+    });
+
+    toggleVoiceBtn.addEventListener('click', () => {
+      voiceEnabled = !voiceEnabled;
+      toggleVoiceBtn.textContent = voiceEnabled ? 'Disabilita voce' : 'Abilita voce';
+      setMessage(voiceEnabled ? 'Voce abilitata.' : 'Voce disabilitata.', false);
     });
 
     toggleSettingsBtn.addEventListener('click', () => {

@@ -23,6 +23,44 @@ export class PartitaScacchi {
     this.history = [];
   }
 
+  loadFromFen(fen) {
+    const parts = fen.trim().split(/\s+/);
+    if (parts.length < 6) {
+      throw new Error('FEN non valido. Formato atteso: placement activeColor castling enPassant halfmoveClock fullmoveNumber');
+    }
+
+    const [placement, activeColor, castling, enPassant, halfmoveClock, fullmoveNumber] = parts;
+
+    // Parsa la posizione
+    this.board = Array(8).fill(null).map(() => Array(8).fill(null));
+    const ranks = placement.split('/');
+    if (ranks.length !== 8) {
+      throw new Error('FEN non valido: placement deve avere 8 righe');
+    }
+
+    for (let r = 0; r < 8; r++) {
+      let col = 0;
+      for (const char of ranks[r]) {
+        if (char >= '1' && char <= '8') {
+          col += Number(char);
+        } else if (/[pnbrqkPNBRQK]/.test(char)) {
+          this.board[r][col] = char;
+          col++;
+        }
+      }
+      if (col !== 8) {
+        throw new Error(`FEN non valido: riga ${r} non ha 8 caselle`);
+      }
+    }
+
+    this.activeColor = activeColor === 'w' ? 'w' : 'b';
+    this.castling = castling === '-' ? '-' : castling;
+    this.enPassant = enPassant === '-' ? '-' : enPassant;
+    this.halfmoveClock = parseInt(halfmoveClock) || 0;
+    this.fullmoveNumber = parseInt(fullmoveNumber) || 1;
+    this.history = [];
+  }
+
   squareToCoords(square) {
     if (!/^[a-h][1-8]$/.test(square)) {
       throw new Error(`Casa non valida: ${square}`);
