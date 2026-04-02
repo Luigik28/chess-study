@@ -133,16 +133,12 @@
     <button id="moveBtn">Applica mossa</button>
   </div>
 
-  <div class="row">
-    <button id="resetBtn">Reset partita</button>
-  </div>
+  <div id="message" class="row"></div>
 
   <div class="row">
     <strong>Scacchiera:</strong> <button id="toggleBoard">Mostra</button>
     <div id="board" style="display: none;"></div>
   </div>
-
-  <div id="message" class="row"></div>
 
   <div class="row">
     <strong>FEN corrente:</strong> <button id="toggleFen">Mostra</button>
@@ -152,6 +148,10 @@
   <div class="row">
     <strong>Cronologia:</strong> <button id="toggleHistory">Mostra</button>
     <ul id="history" style="display: none;"></ul>
+  </div>
+
+  <div class="row">
+    <button id="resetBtn">Reset partita</button>
   </div>
 
   <div class="row">
@@ -294,10 +294,10 @@
       try {
         partita.makeMove(move);
         await partita.makeStockfishMove();
-        const lastMove = partita.history[partita.history.length - 1]?.move;
-        speakMoveUci(lastMove);
+        const sanMove = partita.lastMove || partita.history[partita.history.length - 1]?.move;
+        speakMoveUci(sanMove);
         
-        setMessage(`Ultima mossa del motore: ${partita.lastMove}`, false); 
+        setMessage(`Ultima mossa del motore: ${sanMove}`, false);
         moveInput.value = '';
         render();
         moveInput.focus();
