@@ -297,7 +297,7 @@
         const lastMove = partita.history[partita.history.length - 1]?.move;
         speakMoveUci(lastMove);
         
-        //setMessage(`Mossa applicata. Nuova FEN: ${partita.getFen()}`, false); 
+        setMessage(`Ultima mossa del motore: ${partita.lastMove}`, false); 
         moveInput.value = '';
         render();
         moveInput.focus();

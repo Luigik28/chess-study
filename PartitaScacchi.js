@@ -285,6 +285,9 @@ export class PartitaScacchi {
       const data = await this.postChessApi({ fen: fen, depth: depth, maxThinkingTime: maxThinkingTime });
       console.log(data);
       if (data && data.from && data.to) {
+        if (data.san)  {
+          this.lastMove = data.san
+        }
         this.makeMove(`${data.from}${data.to}`);
       }
     } catch (error) {
