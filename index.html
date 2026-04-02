@@ -39,6 +39,29 @@
       padding: 16px;
       border-radius: 8px;
       overflow-x: auto;
+      width: fit-content;
+    }
+    #board {
+      display: inline-block;
+      border: 2px solid #333;
+      background: #f0d9b5;
+      width: fit-content;
+    }
+    #board table {
+      border-collapse: collapse;
+    }
+    #board td {
+      width: 40px;
+      height: 40px;
+      text-align: center;
+      font-size: 30px;
+      border: 1px solid #333;
+    }
+    #board .white {
+      background: #f0d9b5;
+    }
+    #board .black {
+      background: #b58863;
     }
     .row {
       margin: 16px 0;
@@ -78,6 +101,11 @@
       pre {
         padding: 12px;
       }
+      #board td {
+        width: 30px;
+        height: 30px;
+        font-size: 24px;
+      }
       .row {
         margin: 12px 0;
       }
@@ -100,7 +128,7 @@
 
   <div class="row">
     <strong>Scacchiera:</strong> <button id="toggleBoard">Mostra</button>
-    <pre id="board" style="display: none;"></pre>
+    <div id="board" style="display: none;"></div>
   </div>
 
   <div id="message" class="row"></div>
@@ -158,7 +186,7 @@
 
     function render() {
       fenEl.textContent = partita.getFen();
-      boardEl.textContent = partita.renderBoardAscii();
+      boardEl.innerHTML = partita.renderBoardHTML();
       historyEl.innerHTML = '';
 
       partita.history.forEach(item => {
