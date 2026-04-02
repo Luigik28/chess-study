@@ -60,8 +60,12 @@
     #board .white {
       background: #f0d9b5;
     }
-    #board .black {
-      background: #b58863;
+    #board .coord {
+      background: #ddd;
+      font-size: 14px;
+      font-weight: bold;
+      text-align: center;
+      border: 1px solid #333;
     }
     .row {
       margin: 16px 0;
@@ -106,6 +110,9 @@
         height: 30px;
         font-size: 24px;
       }
+      #board .coord {
+        font-size: 12px;
+      }
       .row {
         margin: 12px 0;
       }
@@ -113,8 +120,6 @@
   </style>
 </head>
 <body>
-  <h1>Chess</h1>
-
   <p>Inserisci mosse in formato UCI, ad esempio: <code>e2e4</code>, <code>g1f3</code>, <code>e7e8q</code>.</p>
 
   <div class="row">

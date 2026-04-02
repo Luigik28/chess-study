@@ -374,6 +374,8 @@ export class PartitaScacchi {
     let html = '<table>';
     for (let r = 0; r < 8; r++) {
       html += '<tr>';
+      // Coordinata a sinistra
+      html += `<td class="coord">${8 - r}</td>`;
       for (let c = 0; c < 8; c++) {
         const piece = this.board[r][c];
         const isWhite = (r + c) % 2 === 0;
@@ -383,6 +385,12 @@ export class PartitaScacchi {
       }
       html += '</tr>';
     }
+    // Riga delle coordinate in basso
+    html += '<tr><td></td>';
+    for (let c = 0; c < 8; c++) {
+      html += `<td class="coord">${String.fromCharCode(97 + c)}</td>`;
+    }
+    html += '</tr>';
     html += '</table>';
     return html;
   }
